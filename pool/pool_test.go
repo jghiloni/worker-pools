@@ -20,12 +20,11 @@ func prework(counter *int32) pool.PrePostWorkFunc {
 }
 
 func work(m *sync.Mutex, w io.Writer) pool.WorkFunc[int] {
-	return func(ctx context.Context, i int) error {
+	return func(ctx context.Context, i int) {
 		m.Lock()
 		fmt.Fprintln(w, "item", i)
 		m.Unlock()
 
-		return nil
 	}
 }
 
@@ -50,7 +49,7 @@ func TestPoolWithDifferentBuffers(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			wc, _ := workPool.Start(context.Background())
+			wc := workPool.Start(context.Background())
 
 			for i := range 1000 {
 				wc <- i

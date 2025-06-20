@@ -11,7 +11,7 @@ import (
 type PrePostWorkFunc func(context.Context)
 
 // WorkFunc is the type called by every pool worker when it receives an item to process
-type WorkFunc[T any] func(context.Context, T) error
+type WorkFunc[T any] func(context.Context, T)
 
 // WorkerPool represents a constrained collection of goroutines that all pull from a
 // shared channel and do the same thing, allowing for cleaner code around parallelizing
@@ -23,7 +23,6 @@ type WorkerPool[T any] struct {
 
 	poolSize       int
 	workChan       chan T
-	errChan        chan error
 	workChanBuffer int
 	wg             *sync.WaitGroup
 }
@@ -52,21 +51,19 @@ func NewWorkerPool[T any](workFunc WorkFunc[T], options ...PoolOption[T]) (*Work
 // Start will launch all the worker funcs and return two channels. The first channel
 // is one that you send work to, and the second one will receive errors from the workers
 // if the work function returns an error
-func (w *WorkerPool[T]) Start(ctx context.Context) (chan T, chan error) {
+func (w *WorkerPool[T]) Start(ctx context.Context) chan T {
 	w.workChan = make(chan T, w.workChanBuffer)
-	w.errChan = make(chan error, 1)
 
 	for range w.poolSize {
 		go w.worker(ctx)
 	}
 
-	return w.workChan, w.errChan
+	return w.workChan
 }
 
 // Stop is a convenience method that will close both channels returned by Start and
 // wait for all workers to finish.
 func (w *WorkerPool[T]) Stop() {
-	close(w.errChan)
 	close(w.workChan)
 
 	w.wg.Wait()
@@ -80,9 +77,7 @@ func (w *WorkerPool[T]) worker(ctx context.Context) {
 	}
 
 	for t := range w.workChan {
-		if err := w.workFunc(ctx, t); err != nil {
-			w.errChan <- err
-		}
+		w.workFunc(ctx, t)
 	}
 
 	if w.postworkFunc != nil {
